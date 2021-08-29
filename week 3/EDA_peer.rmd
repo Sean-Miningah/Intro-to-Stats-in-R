@@ -1,0 +1,237 @@
+---
+title: "Peer Assessment I"
+output:
+  html_document: 
+    pandoc_args: [
+      "--number-sections",
+    ]
+---
+
+
+First, let us load the data and necessary packages:
+
+```{r load, message = FALSE}
+load("ames_train.Rdata")
+library(MASS)
+library(dplyr)
+library(ggplot2)
+library(devtools)
+library(BAS)
+library(tidyverse)
+library(caret)
+```
+
+#
+Make a labeled histogram (with 30 bins) of the ages of the houses in the data set, and describe the distribution.
+
+
+```{r Q1}
+# type your code for Question 1 here, and Knit
+ames_train$age <- 2021 - ames_train$Year.Built
+ames_train %>%
+  ggplot(aes(x = age)) + 
+  geom_histogram(colour = 5, fill = "steel blue", bins = 30) +
+  labs(x = "House Age", y = "Count", title = "Frequency of the age of houses",
+       subtitle = "The histogram is divided into 30 bins")
+```
+
+
+* * *
+
+From the histogram we have observed presence of right skewness in the dataset.
+There is a large number oh houses younger than 40 years. 
+
+* * *
+
+
+#
+The mantra in real estate is "Location, Location, Location!" Make a graphical display that relates a home price to its neighborhood in Ames, Iowa. Which summary statistics are most appropriate to use for determining the most expensive, least expensive, and most heterogeneous (having the most variation in housing price) neighborhoods? Report which neighborhoods these are based on the summary statistics of your choice. Report the value of your chosen summary statistics for these neighborhoods.
+
+
+```{r Q2}
+# type your code for Question 2 here, and Knit
+ames_train %>%
+  group_by(Neighborhood) %>%
+  summarise(Std = sd(price), least_expensive = min(price),
+            max_expensive = max(price)) %>%
+            arrange(desc(Std))
+ames_train %>%
+  group_by(Neighborhood) %>%
+  summarise(Std = sd(price), least_expensive = min(price),
+            max_expensive = max(price)) %>%
+            arrange(desc(least_expensive))
+
+ames_train %>%
+  group_by(Neighborhood) %>%
+  summarise(Std = sd(price), least_expensive = min(price),
+            max_expensive = max(price)) %>%
+            arrange(desc(max_expensive))
+```
+
+
+* * *
+StoneBr has the highest standard deviation therefore it is the most heteregenous neighbourhood.
+
+The neighbourhood with the most expensive price is NridgHt.
+
+The cheapest neigbourhood is Old Town. 
+* * *
+
+# 
+
+Which variable has the largest number of missing values? Explain why it makes sense that there are so many missing values for this variable.
+
+```{r Q3}
+# type your code for Question 3 here, and Knit
+summary(ames_train)
+
+median_data = ames_train %>% 
+    group_by(Neighborhood) %>% 
+    summarize(med_price = median(price), IQR_price = IQR(price))
+
+cc = sample(colorspace::rainbow_hcl(27, c = 100, l=60,start = 0, end = 300), 27)
+ames_train %>%
+    left_join(median_data) %>%
+    mutate(Neighborhood = reorder(Neighborhood, -med_price)) %>%
+    ggplot(aes(x=Neighborhood, y = price)) +
+    geom_jitter(aes(color=Neighborhood),alpha= 0.25, height = 0, width = 0.3) +
+    geom_boxplot(fill=NA, outlier.shape=NA) +
+    scale_color_manual(values = cc) +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+    guides(fill=FALSE, color=FALSE) +
+    labs(title = "Distribution of Home Prices by Neighborhood", 
+                 y = "Home Price", 
+                 x = "Neighborhood")
+```
+
+
+* * *
+
+Pool Quality has the largest number of missing values. 
+
+This may be justified due to the fact that not all house have pools therefore not all lots will have a pool quality statistic.
+* * *
+
+#
+
+We want to predict the natural log of the home prices. Candidate explanatory variables are lot size in square feet (Lot.Area), slope of property (Land.Slope), original construction date (Year.Built), remodel date (Year.Remod.Add), and the number of bedrooms above grade (Bedroom.AbvGr). Pick a model selection or model averaging method covered in the Specialization, and describe how this method works. Then, use this method to find the best multiple regression model for predicting the natural log of the home prices.
+
+
+```{r Q4}
+# type your code for Question 4 here, and Knit
+model_lm = lm(log(price)~Lot.Area+Land.Slope
+         +Year.Built+Year.Remod.Add
+        +Bedroom.AbvGr, data = ames_train)
+
+summary(model_lm)
+```
+```{r Q4_v1}
+model_bic = bas.lm(log(price)~Lot.Area+Land.Slope
+         +Year.Built+Year.Remod.Add
+        +Bedroom.AbvGr, data = ames_train,
+        prior = "BIC",
+        modelprior = uniform(),
+        method = "MCMC" )
+summary(model_bic)
+
+```
+
+
+* * *
+
+The appropriate model to implement using the Bayesian Model Averaging, multiple models are averaged to obtain posteriors of coefficients and predictions. BIC is our prior, it provides highest Posterior  Probabilities values among all other methods. Running BMA(BIC and MCMC), we can see that the model suggests to keep all variables as the best fitted predictors of the home price. 
+* * *
+
+#
+
+Which home has the largest squared residual in the previous analysis (Question 4)? Looking at all the variables in the data set, can you explain why this home stands out from the rest (what factors contribute to the high squared residual and why are those factors relevant)?
+
+
+```{r Q5}
+# type your code for Question 5 here, and Knit
+plot(model_lm)
+```
+
+```{r}
+outliersHouse <- ames_train[which(model_lm$residuals^2 == max(model_lm$residuals^2)),]
+outliersHouse
+```
+
+```{r}
+predictedPrice <- exp(model_lm$fitted.values[which(model_lm$residuals^2 == max((model_lm$residuals)^2))])
+predictedPrice
+```
+
+* * *
+The lot with PID no as 902207130 is the outlier with highest squared residual. This may be due to the low price of the house and the year of build. It was retail for just over USD12000 in 1928. The predicted price is USD 103176. 
+* * *
+
+#
+
+Use the same model selection method you chose in Question 4 to again find the best multiple regression model to predict the natural log of home prices, but this time **replacing Lot.Area with log(Lot.Area)**. Do you arrive at a model including the same set of predictors?
+
+
+```{r Q6}
+# type your code for Question 6 here, and Knit
+model_bic = bas.lm(log(price) ~ log(Lot.Area)+Land.Slope
+         +Year.Built+Year.Remod.Add
+        +Bedroom.AbvGr, data = ames_train,
+        prior = "BIC",
+        modelprior = uniform(),
+        method = "MCMC" )
+summary(model_bic)
+```
+
+Modifyinh the variable Lot.Area by natural log, leads us to a slightly different model that exclude the Land.SlopeSev variable. This model has a higher r2 value
+* * *
+
+#
+
+Do you think it is better to log transform Lot.Area, in terms of assumptions for linear regression? Make graphs of the predicted values of log home price versus the true values of log home price for the regression models selected for Lot.Area and log(Lot.Area). Referencing these two plots, provide a written support that includes a quantitative justification for your answer in the first part of question 7.
+
+```{r Q7}
+# type your code for Question 7 here, and Knit
+model_lm_1 = lm(log(price)~Lot.Area+Land.Slope
+         +Year.Built+Year.Remod.Add
+        +Bedroom.AbvGr, data = ames_train)
+
+summary(model_lm_1)
+
+model_lm_2 = lm(log(price)~log(Lot.Area)+Land.Slope
+         +Year.Built+Year.Remod.Add
+        +Bedroom.AbvGr, data = ames_train)
+
+summary(model_lm_2)
+```
+
+```{r}
+plot(model_lm_1)
+```
+
+```{r}
+plot(model_lm_2)
+```
+
+```{r}
+log_ActualPrice <- log(ames_train$price)
+predict_model_1 <- predict.lm(model_lm_1, ames_train)
+predict_model_2 <- predict.lm(model_lm_2, ames_train)
+
+plotDataFrame = data.frame(log_ActualPrice = log_ActualPrice, PredictedPrice = c(predict_model_1, predict_model_2), predictionType=c(rep(c("Lot.Area"),1000),rep(c("log(Lot.Area))"),1000)), difference = c((log_ActualPrice - predict_model_1), (log_ActualPrice - predict_model_2)))
+
+ggplot(data=plotDataFrame, aes(x = log_ActualPrice, y = PredictedPrice, color = predictionType)) +
+    geom_point(alpha = 0.5) +
+    geom_abline(slope=1, intercept=0) + 
+    labs(title = "Predicted log(Price) vs Actual log(Price) for Both Models", y = "Predicted log(Price)", x = "Actual log(Price)")
+```
+
+* * *
+
+The adjusted R squared values however do show that log transformation does improved modeling as the values of Rsquared increases from  0.56p to 0.60.
+
+The difference observed between the predicted and actual prices for the two models should be tested statistically. To confirm what we observed in the graph a hypothesis test with null hypothesis that both results are actually equivalent is conducted. 
+
+There is not sufficient evidence to reject the null hypothesis and a statistically significant difference in results for both models in not present.
+* * *
+###
